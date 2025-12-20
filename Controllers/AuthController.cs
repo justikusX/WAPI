@@ -52,5 +52,31 @@ public class AuthController : ControllerBase
         );
 
         return new LoginResponse(new JwtSecurityTokenHandler().WriteToken(token));
+
+
     }
+
+    [HttpPost("register")]
+    public async Task<IActionResult> Register(RegisterRequest req, CancellationToken ct)
+    {
+        if (await _db.Admins.AnyAsync(a => a.Login == req.Login, ct))
+            return Conflict("Пользователь с таким логином уже существует");
+
+        var admin = new Admin
+        {
+            Login = req.Login,
+            FirstName = req.FirstName,
+            LastName = req.LastName,
+            Role = req.Role ?? "admin",
+            IsActive = true
+        };
+
+        admin.SetPassword(req.Password);
+        _db.Admins.Add(admin);
+        await _db.SaveChangesAsync(ct);
+
+        return Ok();
+    }
+
+
 }
