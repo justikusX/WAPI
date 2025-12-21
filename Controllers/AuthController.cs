@@ -1,11 +1,11 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using WAPI.Dtos;
-
 using WPFPoliclinic.Models;
 
 namespace WAPI.Controllers;
@@ -78,5 +78,33 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<ActionResult<AdminProfileResponse>> Me(CancellationToken ct)
+    {
+        // пробуем несколько вариантов
+        var idStr =
+            User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
 
+        if (!int.TryParse(idStr, out var adminId))
+            return Unauthorized();
+
+        var admin = await _db.Admins.FirstOrDefaultAsync(a => a.Id == adminId, ct);
+        if (admin is null) return Unauthorized();
+
+        return new AdminProfileResponse
+        {
+            Id = admin.Id,
+            Login = admin.Login,
+            FirstName = admin.FirstName,
+            LastName = admin.LastName,
+            Role = admin.Role,
+            IsActive = admin.IsActive,
+            LastLogin = admin.LastLogin
+        };
+
+
+    }
 }
