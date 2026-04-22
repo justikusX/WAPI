@@ -3,8 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using WAPI;
 using WAPI.Json;
+using WAPI.Middlewares;
 using WAPI.Seed;
+using WAPI.Services;
 using WPFPoliclinic.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,7 +16,6 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(o =>
     {
-        
         o.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
         o.JsonSerializerOptions.Converters.Add(new NullableDateOnlyJsonConverter());
     });
@@ -22,7 +24,12 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "WAPI", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "WAPI",
+        Version = "v1",
+        Description = "Web API for Policlinic"
+    });
 
     var jwtScheme = new OpenApiSecurityScheme
     {
@@ -32,20 +39,22 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         Description = "¬ведите: Bearer {token}",
-        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+        Reference = new OpenApiReference
+        {
+            Type = ReferenceType.SecurityScheme,
+            Id = "Bearer"
+        }
     };
 
     c.AddSecurityDefinition("Bearer", jwtScheme);
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
-        {jwtScheme, Array.Empty<string>() }
+        { jwtScheme, Array.Empty<string>() }
     });
 });
 
-
 builder.Services.AddDbContext<PoliclinicContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("Policlinic")));
-
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opt =>
@@ -66,16 +75,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1024;
+    options.TrackStatistics = true;
+});
+
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddResponseCaching();
+
+builder.Services.AddScoped<IVisitsService, VisitsService>();
+builder.Services.AddScoped<IDoctorsService, DoctorsService>();
+builder.Services.AddScoped<IPatientsService, PatientsService>();
+
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "WAPI v1"));
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "WAPI v1"));
+}
+
+app.UseHttpsRedirection();
+
+app.UseResponseCaching();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
 
 await app.SeedAdminsAsync();
 
